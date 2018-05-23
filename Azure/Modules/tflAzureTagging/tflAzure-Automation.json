@@ -1,0 +1,23 @@
+{ 
+   "ConnectionFields": [
+   {
+      "IsEncrypted":  false,
+      "IsOptional":  false,
+      "Name":  "ComputerName",
+      "TypeName":  "System.String"
+   },
+   {
+      "IsEncrypted":  false,
+      "IsOptional":  true,
+      "Name":  "Username",
+      "TypeName":  "System.String"
+   },
+   {
+      "IsEncrypted":  true,
+      "IsOptional":  false,
+      "Name":  "Password",
+   "TypeName":  "System.String"
+   }],
+   "ConnectionTypeName":  "DataProtectionManager",
+   "IntegrationModuleName":  "DataProtectionManager"
+}
