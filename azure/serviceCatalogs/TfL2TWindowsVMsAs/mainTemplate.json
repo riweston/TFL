@@ -1,0 +1,519 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "adminUsername": {
+        "type": "string",
+        "defaultValue": "vmadmin",
+        "metadata": {
+          "description": "Local administrator"
+        }
+      },
+      "adminPassword": {
+        "type": "securestring",
+        "defaultValue": null,
+        "metadata": {
+          "description": "Local administrator password"
+        }
+      },
+      "location": {
+        "type": "string",
+        "defaultValue": "WestEurope",
+        "allowedValues": [
+          "uksouth",
+          "ukwest",
+          "westeurope",
+          "northeurope"
+        ],
+        "metadata": {
+          "description": "Location for Virtual Machine"
+        }
+      },
+      "sku": {
+        "type": "string",
+        "defaultValue": "2016-Datacenter-Server-Core-Smalldisk",
+        "allowedValues": [
+          "2012-R2-Datacenter",
+          "2016-Datacenter",
+          "2016-Datacenter-Server-Core",
+          "2016-Datacenter-Server-Core-Smalldisk"
+        ],
+        "metadata": {
+          "description": "Virtual Machine SKU"
+        }
+      },
+      "numberWeb": {
+        "type": "int",
+        "defaultValue": 2,
+        "metadata": {
+          "description": "Number of Web Tier Servers"
+        }
+      },
+      "numberApp": {
+        "type": "int",
+        "defaultValue": 2,
+        "metadata": {
+          "description": "Number of App Tier Servers"
+        }
+      },
+      "subnetNameWeb": {
+        "type": "string",
+        "defaultValue": "default",
+        "metadata": {
+          "description": "Web Tier Subnet name (existing)"
+        }
+      },
+      "subnetNameApp": {
+        "type": "string",
+        "defaultValue": "default",
+        "metadata": {
+          "description": "App Tier Subnet name (existing)"
+        }
+      },
+      "tagCostCode": {
+        "type": "string",
+        "defaultValue": "tbd",
+        "metadata": {
+          "description": "Cost code"
+        }
+      },
+      "tagOwner": {
+        "type": "string",
+        "defaultValue": "me",
+        "metadata": {
+          "description": "Owner email address"
+        }
+      },
+      "vmNamePrefix": {
+        "type": "string",
+        "metadata": {
+          "description": "Virtual Machine Name Prefix"
+        }
+      },
+      "vmSize": {
+        "type": "string",
+        "defaultValue": "Standard_D2S_v3",
+        "allowedValues": [
+          "Standard_DS2_v2",
+          "Standard_DS3_v2",
+          "Standard_D2S_v3",
+          "Standard_D4S_v3"
+        ],
+        "metadata": {
+          "description": "Virtual Machine Size"
+        }
+      },
+      "vnetName": {
+        "type": "string",
+        "defaultValue": "VNET",
+        "metadata": {
+          "description": "Virtual Network name (existing)"
+        }
+      },
+      "vnetResourceGroup": {
+        "type": "string",
+        "defaultValue": "Default-Networking",
+        "metadata": {
+          "description": "Resource Group name (existing) containing the Vnet"
+        }
+      }
+    },
+    "variables": {
+      "lbID-WEB": "[resourceId('Microsoft.Network/loadBalancers','LB-WEB')]",
+      "lbID-APP": "[resourceId('Microsoft.Network/loadBalancers','LB-APP')]",
+      "vnetId": "[resourceId(parameters('vnetResourceGroup'),'Microsoft.Network/virtualNetworks',parameters('vnetName'))]"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Compute/virtualMachines",
+        "name": "[concat(parameters('vmNamePrefix'),'W',copyIndex())]",
+        "apiVersion": "2017-03-30",
+        "copy": {
+          "name": "main-loop",
+          "count": "[parameters('numberWeb')]"
+        },
+        "location": "[parameters('location')]",
+        "tags": {
+          "CostCode": "[parameters('tagCostCode')]",
+          "Owner": "[parameters('tagOwner')]"
+        },
+        "properties": {
+          "availabilitySet": {
+            "id": "[resourceId('Microsoft.Compute/availabilitySets', 'AS-WEB')]"
+          },
+          "hardwareProfile": {
+            "vmSize": "[parameters('vmSize')]"
+          },
+          "storageProfile": {
+            "imageReference": {
+              "publisher": "MicrosoftWindowsServer",
+              "offer": "WindowsServer",
+              "sku": "[parameters('sku')]",
+              "version": "latest"
+            },
+            "osDisk": {
+              "name": "[concat(parameters('vmNamePrefix'),'W',copyIndex(),'-OS')]",
+              "createOption": "FromImage",
+              "caching": "ReadWrite",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              }
+            },
+            "dataDisks": []
+          },
+          "osProfile": {
+            "computerName": "[concat(parameters('vmNamePrefix'),'W',copyIndex())]",
+            "adminUsername": "[parameters('adminUsername')]",
+            "windowsConfiguration": {
+              "provisionVMAgent": true,
+              "enableAutomaticUpdates": true,
+              "timeZone": "GMT Standard Time"
+            },
+            "secrets": [],
+            "adminPassword": "[parameters('adminPassword')]"
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmNamePrefix'),'W',copyIndex(),'-VNIC1'))]",
+                "properties": {
+                  "primary": true
+                }
+              }
+            ]
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmNamePrefix'),'W',copyIndex(),'-VNIC1'))]",
+          "AS-WEB"
+        ],
+        "resources": [
+        ]
+      },
+      {
+        "type": "Microsoft.Compute/virtualMachines",
+        "name": "[concat(parameters('vmNamePrefix'),'A',copyIndex())]",
+        "apiVersion": "2017-03-30",
+        "copy": {
+          "name": "main-loop",
+          "count": "[parameters('numberApp')]"
+        },
+        "location": "[parameters('location')]",
+        "tags": {
+          "CostCode": "[parameters('tagCostCode')]",
+          "Owner": "[parameters('tagOwner')]"
+        },
+        "properties": {
+          "availabilitySet": {
+            "id": "[resourceId('Microsoft.Compute/availabilitySets', 'AS-APP')]"
+          },
+          "hardwareProfile": {
+            "vmSize": "[parameters('vmSize')]"
+          },
+          "storageProfile": {
+            "imageReference": {
+              "publisher": "MicrosoftWindowsServer",
+              "offer": "WindowsServer",
+              "sku": "[parameters('sku')]",
+              "version": "latest"
+            },
+            "osDisk": {
+              "name": "[concat(parameters('vmNamePrefix'),'A',copyIndex(),'-OS')]",
+              "createOption": "FromImage",
+              "caching": "ReadWrite",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              }
+            },
+            "dataDisks": []
+          },
+          "osProfile": {
+            "computerName": "[concat(parameters('vmNamePrefix'),'A',copyIndex())]",
+            "adminUsername": "[parameters('adminUsername')]",
+            "windowsConfiguration": {
+              "provisionVMAgent": true,
+              "enableAutomaticUpdates": true,
+              "timeZone": "GMT Standard Time"
+            },
+            "secrets": [],
+            "adminPassword": "[parameters('adminPassword')]"
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmNamePrefix'),'A',copyIndex(),'-VNIC1'))]",
+                "properties": {
+                  "primary": true
+                }
+              }
+            ]
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmNamePrefix'),'A',copyIndex(),'-VNIC1'))]",
+          "AS-APP"
+        ],
+        "resources": [
+        ]
+      },
+      {
+        "type": "Microsoft.Network/networkInterfaces",
+        "name": "[concat(parameters('vmNamePrefix'),'W',copyIndex(),'-VNIC1')]",
+        "apiVersion": "2017-10-01",
+        "copy": {
+          "name": "main-loop",
+          "count": "[parameters('numberWeb')]"
+        },
+        "location": "[parameters('location')]",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "properties": {
+                "privateIPAllocationMethod": "Dynamic",
+                "subnet": {
+                  "id": "[concat(variables('vnetId'),'/subnets/',parameters('subnetNameWeb'))]"
+                },
+                "loadBalancerBackendAddressPools": [
+                  {
+                    "id": "[concat(variables('lbID-WEB'), '/backendAddressPools/WEB-BackendPool')]"
+                  }
+                ]
+              }
+            }
+          ],
+          "enableIPForwarding": false
+        },
+        "dependsOn": [
+          "LB-WEB"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/networkInterfaces",
+        "name": "[concat(parameters('vmNamePrefix'),'A',copyIndex(),'-VNIC1')]",
+        "apiVersion": "2017-10-01",
+        "copy": {
+          "name": "main-loop",
+          "count": "[parameters('numberApp')]"
+        },
+        "location": "[parameters('location')]",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "properties": {
+                "privateIPAllocationMethod": "Dynamic",
+                "subnet": {
+                  "id": "[concat(variables('vnetId'),'/subnets/',parameters('subnetNameApp'))]"
+                },
+                "loadBalancerBackendAddressPools": [
+                  {
+                    "id": "[concat(variables('lbID-APP'), '/backendAddressPools/APP-BackendPool')]"
+                  }
+                ]
+              }
+            }
+          ],
+          "enableIPForwarding": false
+        },
+        "dependsOn": [
+          "LB-APP"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/loadBalancers",
+        "name": "LB-WEB",
+        "apiVersion": "2017-10-01",
+        "location": "[parameters('location')]",
+        "properties": {
+          "frontendIPConfigurations": [
+            {
+              "name": "WEB-FE",
+              "properties": {
+                "privateIPAllocationMethod": "Dynamic",
+                "subnet": {
+                  "id": "[concat(variables('vnetID'),'/subnets/',parameters('subnetNameWeb'))]"
+                }
+              }
+            }
+          ],
+          "backendAddressPools": [
+            {
+              "name": "WEB-BackendPool"
+            }
+          ],
+          "loadBalancingRules": [
+            {
+              "name": "Http",
+              "properties": {
+                "frontendIPConfiguration": {
+                  "id": "[concat(variables('lbID-WEB'),'/frontendIPConfigurations/WEB-FE')]"
+                },
+                "frontendPort": 80,
+                "backendPort": 80,
+                "enableFloatingIP": false,
+                "idleTimeoutInMinutes": 4,
+                "protocol": "Tcp",
+                "loadDistribution": "Default",
+                "backendAddressPool": {
+                  "id": "[concat(variables('lbID-WEB'),'/backendAddressPools/WEB-BackendPool')]"
+                },
+                "probe": {
+                  "id": "[concat(variables('lbID-WEB'),'/probes/WEB-Probe')]"
+                }
+              }
+            },
+            {
+              "name": "Https",
+              "properties": {
+                "frontendIPConfiguration": {
+                  "id": "[concat(variables('lbID-WEB'),'/frontendIPConfigurations/WEB-FE')]"
+                },
+                "frontendPort": 443,
+                "backendPort": 443,
+                "enableFloatingIP": true,
+                "idleTimeoutInMinutes": 4,
+                "protocol": "Tcp",
+                "loadDistribution": "Default",
+                "backendAddressPool": {
+                  "id": "[concat(variables('lbID-WEB'),'/backendAddressPools/WEB-BackendPool')]"
+                },
+                "probe": {
+                  "id": "[concat(variables('lbID-WEB'),'/probes/WEB-Probe')]"
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "name": "WEB-Probe",
+              "properties": {
+                "protocol": "Tcp",
+                "port": 80,
+                "intervalInSeconds": 5,
+                "numberOfProbes": 2
+              }
+            }
+          ],
+          "inboundNatRules": [],
+          "outboundNatRules": [],
+          "inboundNatPools": []
+        },
+        "resources": [],
+        "dependsOn": []
+      },
+      {
+        "type": "Microsoft.Network/loadBalancers",
+        "name": "LB-APP",
+        "apiVersion": "2017-10-01",
+        "location": "[parameters('location')]",
+        "properties": {
+          "frontendIPConfigurations": [
+            {
+              "name": "APP-FE",
+              "properties": {
+                "privateIPAllocationMethod": "Dynamic",
+                "subnet": {
+                  "id": "[concat(variables('vnetID'),'/subnets/',parameters('subnetNameApp'))]"
+                }
+              }
+            }
+          ],
+          "backendAddressPools": [
+            {
+              "name": "APP-BackendPool"
+            }
+          ],
+          "loadBalancingRules": [
+            {
+              "name": "Http",
+              "properties": {
+                "frontendIPConfiguration": {
+                  "id": "[concat(variables('lbID-APP'),'/frontendIPConfigurations/APP-FE')]"
+                },
+                "frontendPort": 80,
+                "backendPort": 80,
+                "enableFloatingIP": false,
+                "idleTimeoutInMinutes": 4,
+                "protocol": "Tcp",
+                "loadDistribution": "Default",
+                "backendAddressPool": {
+                  "id": "[concat(variables('lbID-APP'),'/backendAddressPools/APP-BackendPool')]"
+                },
+                "probe": {
+                  "id": "[concat(variables('lbID-APP'),'/probes/APP-Probe')]"
+                }
+              }
+            },
+            {
+              "name": "Https",
+              "properties": {
+                "frontendIPConfiguration": {
+                  "id": "[concat(variables('lbID-APP'),'/frontendIPConfigurations/APP-FE')]"
+                },
+                "frontendPort": 443,
+                "backendPort": 443,
+                "enableFloatingIP": false,
+                "idleTimeoutInMinutes": 4,
+                "protocol": "Tcp",
+                "loadDistribution": "Default",
+                "backendAddressPool": {
+                  "id": "[concat(variables('lbID-APP'),'/backendAddressPools/APP-BackendPool')]"
+                },
+                "probe": {
+                  "id": "[concat(variables('lbID-APP'),'/probes/APP-Probe')]"
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "name": "APP-Probe",
+              "properties": {
+                "protocol": "Tcp",
+                "port": 80,
+                "intervalInSeconds": 5,
+                "numberOfProbes": 2
+              }
+            }
+          ],
+          "inboundNatRules": [],
+          "outboundNatRules": [],
+          "inboundNatPools": []
+        },
+        "resources": [],
+        "dependsOn": []
+      },
+      {
+        "name": "AS-WEB",
+        "type": "Microsoft.Compute/availabilitySets",
+        "location": "[parameters('location')]",
+        "apiVersion": "2017-03-30",
+        "dependsOn": [],
+        "tags": {},
+        "properties": {
+          "platformUpdateDomainCount": 5,
+          "platformFaultDomainCount": 2
+        },
+        "sku": {
+          "name": "Aligned"
+        }
+      },
+      {
+        "name": "AS-APP",
+        "type": "Microsoft.Compute/availabilitySets",
+        "location": "[parameters('location')]",
+        "apiVersion": "2017-03-30",
+        "dependsOn": [],
+        "tags": {},
+        "properties": {
+          "platformUpdateDomainCount": 5,
+          "platformFaultDomainCount": 2
+        },
+        "sku": {
+          "name": "Aligned"
+        }
+      }
+    ],
+    "outputs": {}
+  }

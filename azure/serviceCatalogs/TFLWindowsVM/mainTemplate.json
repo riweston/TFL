@@ -1,0 +1,209 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "vmadmin",
+      "metadata": {
+        "description": "Local administrator"
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "defaultValue": null,
+      "metadata": {
+        "description": "Local administrator password"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "NorthEurope",
+      "allowedValues": [
+        "uksouth",
+        "ukwest",
+        "westeurope",
+        "northeurope"
+      ],
+      "metadata": {
+        "description": "Location for Virtual Machine"
+      }
+    },
+    "sku": {
+      "type": "string",
+      "defaultValue": "2016-Datacenter-Server-Core-Smalldisk",
+      "allowedValues": [
+        "2012-R2-Datacenter",
+        "2016-Datacenter",
+        "2016-Datacenter-Server-Core",
+        "2016-Datacenter-Server-Core-Smalldisk"
+      ],
+      "metadata": {
+        "description": "Virtual Machine SKU"
+      }
+    },
+    "subnetName": {
+      "type": "string",
+      "defaultValue": "default",
+      "metadata": {
+        "description": "Subnet name (existing)"
+      }
+    },
+    "tagCostCode": {
+      "type": "string",
+      "defaultValue": "tbd",
+      "metadata": {
+        "description": "Cost code"
+      }
+    },
+    "tagOwner": {
+      "type": "string",
+      "defaultValue": "me",
+      "metadata": {
+        "description": "Owner email address"
+      }
+    },
+    "vmName": {
+      "type": "string",
+      "metadata": {
+        "description": "Virtual Machine Name"
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D2S_v3",
+      "allowedValues": [
+        "Standard_DS2_v2",
+        "Standard_DS3_v2",
+        "Standard_D2S_v3",
+        "Standard_D4S_v3"
+      ],
+      "metadata": {
+        "description": "Virtual Machine Size"
+      }
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "VNET",
+      "metadata": {
+        "description": "Virtual Network name (existing)"
+      }
+    },
+    "vnetResourceGroup": {
+      "type": "string",
+      "defaultValue": "Default-Networking",
+      "metadata": {
+        "description": "Resource Group name (existing) containing the Vnet"
+      }
+    }
+  },
+  "variables": {
+    "vnetId": "[resourceId(parameters('vnetResourceGroup'),'Microsoft.Network/virtualNetworks',parameters('vnetName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[parameters('vmName')]",
+      "apiVersion": "2017-03-30",
+      "location": "[parameters('location')]",
+      "tags": {
+        "CostCode": "[parameters('tagCostCode')]",
+        "Owner": "[parameters('tagOwner')]"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "[parameters('sku')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat(parameters('vmName'),'-OS')]",
+            "createOption": "FromImage",
+            "caching": "ReadWrite",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
+          },
+          "dataDisks": []
+        },
+        "osProfile": {
+          "computerName": "[parameters('vmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "windowsConfiguration": {
+            "provisionVMAgent": true,
+            "enableAutomaticUpdates": true,
+            "timeZone": "GMT Standard Time"
+          },
+          "secrets": [],
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'),'-VNIC1'))]",
+              "properties": {
+                "primary": true
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'),'-VNIC1'))]"
+      ],
+      "resources": [
+
+      ]
+    },
+    {
+      "apiVersion": "2016-05-15",
+      "type": "Microsoft.DevTestLab/schedules",
+      "name": "[concat('shutdown-computevm-',parameters('vmName'))]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/',parameters('vmName'))]"
+      ],
+      "properties": {
+        "status": "Enabled",
+        "timeZoneId": "GMT Standard Time",
+        "taskType": "ComputeVmShutdownTask",
+        "notificationSettings": {
+          "status": "Disabled",
+          "timeInMinutes": 15,
+          "webhookUrl": null
+        },
+        "targetResourceId": "[resourceId('Microsoft.Compute/virtualMachines',parameters('vmName'))]",
+        "dailyRecurrence": {
+          "time": "1800"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(parameters('vmName'),'-VNIC1')]",
+      "apiVersion": "2017-10-01",
+      "location": "[parameters('location')]",
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[concat(variables('vnetId'),'/subnets/',parameters('subnetName'))]"
+              }
+            }
+          }
+        ],
+        "enableIPForwarding": false
+      },
+      "dependsOn": []
+    }
+  ],
+  "outputs": {}
+}
